@@ -1,0 +1,322 @@
+import numpy as np 
+accepted_chars = "abcdefghijklmnopqrstuvwxyz0123456789-.,()' "
+import sys 
+
+def normalize_it(line):
+    line = line.lower()
+    noramlized = "" 
+    for ch in line:
+        if ch in accepted_chars:
+            noramlized += ch 
+    return noramlized
+
+char_to_idx= {
+    ch: i 
+    for i , ch in enumerate(accepted_chars)
+}
+log_probabilties = np.load("trigram_log_probs.npy")
+def avg_transition_probability(text):
+
+    text = normalize_it(text)
+
+    if len(text) < 3:
+        return float("-inf")
+
+    score = 0
+
+    for i in range(1, len(text)-1):
+
+        prev_char = text[i-1]
+        curr_char = text[i]
+        next_char = text[i+1]
+
+        prev = char_to_idx[prev_char]
+        curr = char_to_idx[curr_char]
+        nxt = char_to_idx[next_char]
+
+        score += log_probabilties[prev][curr][nxt]
+
+    return score / (len(text)-2)
+
+
+tests = [
+    "minecraft",
+    "i like minecraft",
+    "i really like minecraft",
+    "lsjfasjff js;lkdfj"
+]
+k = len(accepted_chars)
+#this part is just to check if the model is working
+# for t in tests:
+#     print(t, avg_transition_probability(t))
+
+
+import matplotlib.pyplot as plt
+
+from mpl_toolkits import mplot3d
+counts = np.load("trigram_counts.npy")
+def showcase_it(counts):
+    fig = plt.figure(figsize=(12, 10))
+    ax = plt.axes(projection="3d")
+
+    z, y, x = np.indices(counts.shape)
+
+    mask = counts > 0
+
+    scatter = ax.scatter(
+        x[mask],
+        y[mask],
+        z[mask],
+        c=np.log1p(counts[mask]),
+        cmap="viridis",
+        s=np.log1p(counts[mask]) * 5
+    )
+
+    # Axis titles
+    ax.set_xlabel("Next Character")
+    ax.set_ylabel("Current Character")
+    ax.set_zlabel("Previous Character")
+
+    step = 2
+    ticks = list(range(0, k, step))
+
+    ax.set_xticks(ticks)
+    ax.set_yticks(ticks)
+    ax.set_zticks(ticks)
+
+    ax.set_xticklabels(
+        [accepted_chars[i] for i in ticks]
+    )
+    ax.set_yticklabels(
+        [accepted_chars[i] for i in ticks]
+    )
+    ax.set_zticklabels(
+        [accepted_chars[i] for i in ticks]
+    )
+
+    plt.colorbar(
+        scatter,
+        label="log(1 + count)"
+    )
+
+    plt.title("Trigram Transition Counts")
+    plt.show()
+
+def create_dataset_from_tsv(file,row,rows):
+    count=0 
+    dataset = [] 
+    with open(file,'r',encoding="utf-8") as data:
+        for line in data:
+            line = line.strip()
+            actual_line = line.split("\t")
+            data = actual_line[row]
+            dataset.append(data)
+            count+=1 
+            if count>=rows:
+                break 
+
+
+    return dataset 
+
+def create_dataset_from_txt(file,rows):
+    count = 0 
+    dataset = [] 
+    with open(file,'r',encoding="utf-8") as data:
+        for line in data:
+            line = line.strip()
+            dataset.append(line)
+            count+=1 
+            if count>=rows:
+                break 
+
+    return dataset 
+
+
+import random 
+
+
+
+def create_the_structure(total_rows):
+    correct_dataset = create_dataset_from_tsv(file="EnglishTenseUniqueDataset.tsv",row= 0,rows=int(total_rows/2))
+    hybrid_dataset = create_dataset_from_txt(file="hybrid_gibberish.txt",rows=int(total_rows/4))
+    pure_gibberish_dataset = create_dataset_from_txt(file="pure_gibberish.txt",rows=int(total_rows/4))
+    print(f"number of rows in correct dataset = {len(correct_dataset)}")
+    print(f"number of rows in hybrid dataset = {len(hybrid_dataset)}")
+    print(f"number of rows in pure gibberish dataset = {len(pure_gibberish_dataset)}")
+    print("\n")
+    dataset = [] 
+
+    #str of element = {data,actual_type,actual_output(0 for gibberish and 1 for correct),numerical_output,observerd_result}
+    
+    for row in correct_dataset :
+        element = []
+        element.append(row)
+        element.append("correct")
+        element.append(1)
+        dataset.append(element)
+    for row in hybrid_dataset :
+        element = []
+        element.append(row)
+        element.append("hybrid")
+        element.append(0)
+        dataset.append(element)
+    for row in pure_gibberish_dataset :
+        element = []
+        element.append(row)
+        element.append("pure_gibberish")
+        element.append(0)
+        dataset.append(element)
+
+
+    for i in range(len(dataset)):
+        dataset[i].append(0)
+        dataset[i].append("None")
+
+    random.shuffle(dataset)
+
+    return dataset 
+
+
+dataset  = create_the_structure(26000)
+print(f"length of final dataset:- {len(dataset)}")
+print("\n")
+# print(dataset[0])
+scores = []
+
+for sample in dataset:
+
+    sentence = sample[0]
+    actual_type = sample[1]
+
+    score = avg_transition_probability(sentence)
+
+    scores.append((score, actual_type))
+    sample[3] = float(score) 
+
+
+
+def threshold_finder(scores):
+    best_acc= 0 
+    best_threshold = None 
+    for threshold in np.arange(-8, 0, 0.01):
+
+        correct_predictions = 0
+
+        for sentence, label in scores:
+
+            prediction = (
+                "correct"
+                if sentence > threshold
+                else "gibberish"
+            )
+
+            actual = (
+                "correct"
+                if label == "correct"
+                else "gibberish"
+            )
+
+            if prediction == actual:
+                correct_predictions += 1
+
+        accuracy = correct_predictions / len(scores)
+
+        if accuracy > best_acc:
+            best_acc = accuracy
+            best_threshold = threshold
+    print(f"best accuracy obtained is {(best_acc *100):.4f} at the threshold {best_threshold:.5f}")
+    return best_threshold
+# a = threshold_finder(scores)
+
+threshold = -4.190000 #this is find by above funtion 
+correct = np.array([])
+hy  = np.array([])
+pure = np.array([])
+# print(dataset[0])
+
+for sample in dataset:
+    if sample[3] > threshold:
+        sample[-1] = "correct"
+    else:
+        sample[-1] = "gibberish"
+
+# print(dataset[0])
+
+def check_individual_accuracy(dataset):
+    correct_correct = 0 
+    correct_hybrid   = 0 
+    correct_pure_gibberish = 0 
+    for sample in dataset:
+        if sample[1] == "correct":
+            if sample[1] == sample[-1]:
+                correct_correct += 1 
+        elif sample[1] == "hybrid":
+            if sample[-1] == "gibberish":
+                correct_hybrid += 1 
+        else:
+            if sample[-1] == "gibberish":
+                correct_pure_gibberish += 1 
+
+    print(f"accuracy of correct is {((correct_correct/13000)*100):.4f}")
+    print(f"accuracy of hybrid is {((correct_hybrid/6500)*100):.4f}")
+    print(f"accuracy of pure gibberish is {((correct_pure_gibberish/6500)*100):.4f}")
+    print("\n")
+
+check_individual_accuracy(dataset)
+
+
+def calculate_confusion_matrix(dataset):
+    true_positive = 0 
+    false_negative = 0 
+    false_positive = 0 
+    true_negative = 0 
+    for sample in dataset: 
+        if sample[2] == 1:
+            if sample[-1] == "correct":
+                true_positive +=1 
+            else: 
+                false_negative +=1 
+        else: 
+            if sample[-1] == "gibberish":
+                true_negative+= 1
+            else:
+                false_positive+=1 
+    print(f"__________________confusion martix_______________________________")
+    print(f"                  | predicted positive | predicted negative |")
+    print(f"actual positive   |        {true_positive}       |         {false_negative}        |")
+    print(f"actual negative   |        {false_positive}        |        {true_negative}       | ")
+    print('\n')
+
+
+    confusion_matrix = np.array([
+    [true_positive, false_negative],  
+    [false_positive, true_negative]   
+    ])
+    return confusion_matrix
+
+confusion_matrix = calculate_confusion_matrix(dataset)
+
+def calculate_the_benchmarks(matrix):
+    TP = matrix[0][0]
+    FN = matrix[0][1] 
+    FP = matrix[1][0]
+    TN = matrix[1][1]
+
+    accuracy = (TP+TN)/(TP + FN + FP + TN )
+    precision = TP / (TP + FP) 
+    recall = TP / (TP + FN)
+    F1_score = (2*precision*recall) / (precision + recall)
+    type1_error = FP / (FP + TN)
+    type2_error = FN / (TP + FN)
+    specificty = TN / (TN + FP)
+
+    print(f"_____________BENCHMARKS_________")
+    print(f"ACCURACY =  {accuracy:.3f}")
+    print(f"PRECISION =  {precision:.3f}")
+    print(f"RECALL =  {recall:.3f}")
+    print(f"F1-SCORE =  {F1_score:.3f}")
+    print(f"TYPE 1 ERROR =  {type1_error:.3f}")
+    print(f"TYPE 2 ERROR = {type2_error:.3f}")
+    print(f"SPECIFICITY = {specificty:.3f}")
+
+calculate_the_benchmarks(confusion_matrix)
