@@ -18,7 +18,7 @@ with open("hybrid_gibberish.txt","w",encoding="utf-8") as file :
             word = random.choice(correct)
             lista.append(word)
         
-        amount_of_gibberish = random.randint(0,4)
+        amount_of_gibberish = random.randint(1,4)
         for i in range(amount_of_gibberish):
             word = random.choice(gibberish)
             lista.append(word)

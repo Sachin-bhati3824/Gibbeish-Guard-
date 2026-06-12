@@ -47,27 +47,22 @@ for row in range(k):
 print(probabilites.sum(axis=1))
 import matplotlib.pyplot as plt
 
-# plt.figure(figsize=(10, 8))
+plt.figure(figsize=(10, 8))
 
-# plt.imshow(probabilites)
-# plt.colorbar()
+plt.imshow(probabilites)
+plt.colorbar()
 
-# plt.xticks(range(len(accepted_chars)), accepted_chars)
-# plt.yticks(range(len(accepted_chars)), accepted_chars)
+plt.xticks(range(len(accepted_chars)), accepted_chars)
+plt.yticks(range(len(accepted_chars)), accepted_chars)
 
-# plt.xlabel("Next Character")
-# plt.ylabel("Current Character")
-# plt.title("Character Transition Counts")
+plt.xlabel("Next Character")
+plt.ylabel("Current Character")
+plt.title("Character Transition Counts")
 
-# plt.show()
+plt.show()
 
 log_probabilties = np.log(probabilites) 
-# plt.imshow(log_probabilties)
-# plt.colorbar
 
-# plt.xticks(range(len(accepted_chars)),accepted_chars)
-# plt.yticks(range(len(accepted_chars)),accepted_chars)
-# plt.show()
 
 def avg_transition_probability(text):
     text = normalize_it(text) 
@@ -94,3 +89,26 @@ def is_gibberish(text):
 
 print(is_gibberish("michel"))
 print(is_gibberish("sflk sdff sfjd"))
+
+plt.figure(figsize=(8,8))
+plt.imshow(
+    np.array(log_probabilties),
+    cmap="viridis",
+    aspect="auto"
+)
+plt.colorbar(label="log(count+1)")
+plt.xticks(
+    range(len(accepted_chars)),
+    accepted_chars,
+    rotation=90
+)
+plt.yticks(
+    range(len(accepted_chars)),
+    accepted_chars
+)
+plt.xlabel("Next Character")
+plt.ylabel("Current Character")
+plt.title("Bigram Transition Heatmap")
+
+plt.tight_layout()
+plt.show()

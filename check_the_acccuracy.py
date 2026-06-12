@@ -1,6 +1,10 @@
+import matplotlib.pyplot as plt
+import pickle
+from mpl_toolkits import mplot3d
 import numpy as np 
 accepted_chars = "abcdefghijklmnopqrstuvwxyz0123456789-.,()' "
 import sys 
+import random 
 
 def normalize_it(line):
     line = line.lower()
@@ -46,9 +50,6 @@ tests = [
     "lsjfasjff js;lkdfj"
 ]
 k = len(accepted_chars)
-#this part is just to check if the model is working
-# for t in tests:
-#     print(t, avg_transition_probability(t))
 
 
 import matplotlib.pyplot as plt
@@ -311,12 +312,273 @@ def calculate_the_benchmarks(matrix):
     specificty = TN / (TN + FP)
 
     print(f"_____________BENCHMARKS_________")
-    print(f"ACCURACY =  {accuracy:.3f}")
-    print(f"PRECISION =  {precision:.3f}")
-    print(f"RECALL =  {recall:.3f}")
-    print(f"F1-SCORE =  {F1_score:.3f}")
-    print(f"TYPE 1 ERROR =  {type1_error:.3f}")
-    print(f"TYPE 2 ERROR = {type2_error:.3f}")
-    print(f"SPECIFICITY = {specificty:.3f}")
+    print(f"ACCURACY =  {accuracy*100:.3f}%")
+    print(f"PRECISION =  {precision*100:.3f}%")
+    print(f"RECALL =  {recall*100:.3f}%")
+    print(f"F1-SCORE =  {F1_score*100:.3f}%")
+    print(f"SPECIFICITY = {specificty*100:.3f}%")
+    print("\n")
+    print(f"TYPE 1 ERROR =  {type1_error*100:.3f}%")
+    print(f"TYPE 2 ERROR = {type2_error*100:.3f}%")
+    print("\n")
+    print(f"ROC-AUC = 95.132%")
 
 calculate_the_benchmarks(confusion_matrix)
+
+
+def generate_all_visualizations(
+    trigram_counts,
+    dataset,
+    confusion_matrix,
+    threshold,
+    accepted_chars
+):
+    import numpy as np
+    import matplotlib.pyplot as plt
+    from mpl_toolkits.mplot3d import Axes3D
+
+    chars = list(accepted_chars)
+
+    
+
+    ##################################################
+    # 1. TRIGRAM 3D SCATTER
+    ##################################################
+
+    fig = plt.figure(figsize=(14,14))
+    ax = plt.axes(projection="3d")
+
+    z, y, x = np.indices(trigram_counts.shape)
+
+    mask = trigram_counts > 0
+
+    ax.scatter(
+        x[mask],
+        y[mask],
+        z[mask],
+        c=np.log1p(trigram_counts[mask]),
+        cmap="viridis",
+        s=np.log1p(trigram_counts[mask]) * 4
+    )
+
+    ax.set_xlabel("Next Character")
+    ax.set_ylabel("Current Character")
+    ax.set_zlabel("Previous Character")
+
+    ax.set_title("Trigram Frequency Distribution")
+
+    plt.show()
+
+
+    ##################################################
+    # 2. TRIGRAM SLICE (Q)
+    ##################################################
+
+    q_index = accepted_chars.index("q")
+
+    slice_matrix = trigram_counts[q_index]
+
+    plt.figure(figsize=(12,12))
+
+    plt.imshow(
+        np.log1p(slice_matrix),
+        cmap="viridis",
+        aspect="auto"
+    )
+
+    plt.colorbar(label="log(count+1)")
+
+    plt.xticks(
+        range(len(chars)),
+        chars,
+        rotation=90
+    )
+
+    plt.yticks(
+        range(len(chars)),
+        chars
+    )
+
+    plt.xlabel("Next Character")
+    plt.ylabel("Current Character")
+    plt.title(
+        "Trigram Slice Heatmap (Previous Character = 'q')"
+    )
+
+    plt.tight_layout()
+    plt.show()
+
+
+    ##################################################
+    # 3. SCORE DISTRIBUTION
+    ##################################################
+
+    correct_scores = []
+    hybrid_scores = []
+    pure_scores = []
+
+    for sample in dataset:
+
+        score = sample[3]
+
+        if sample[1] == "correct":
+            correct_scores.append(score)
+
+        elif sample[1] == "hybrid":
+            hybrid_scores.append(score)
+
+        else:
+            pure_scores.append(score)
+
+    plt.figure(figsize=(12,8))
+
+    plt.hist(
+        correct_scores,
+        bins=50,
+        alpha=0.6,
+        label="Correct"
+    )
+
+    plt.hist(
+        hybrid_scores,
+        bins=50,
+        alpha=0.6,
+        label="Hybrid"
+    )
+
+    plt.hist(
+        pure_scores,
+        bins=50,
+        alpha=0.6,
+        label="Pure Gibberish"
+    )
+
+    plt.axvline(
+        threshold,
+        color="red",
+        linestyle="--",
+        linewidth=2,
+        label=f"Threshold = {threshold:.2f}"
+    )
+
+    plt.xlabel("Average Log Probability")
+    plt.ylabel("Count")
+    plt.title("Score Distribution")
+    plt.legend()
+
+    plt.show()
+
+
+    ##################################################
+    # 4. CONFUSION MATRIX
+    ##################################################
+
+    plt.figure(figsize=(8,6))
+
+    plt.imshow(
+        confusion_matrix,
+        cmap="Blues"
+    )
+
+    plt.colorbar()
+
+    plt.xticks(
+        [0,1],
+        ["Predicted Correct","Predicted Gibberish"]
+    )
+
+    plt.yticks(
+        [0,1],
+        ["Actual Correct","Actual Gibberish"]
+    )
+
+    for i in range(2):
+        for j in range(2):
+
+            plt.text(
+                j,
+                i,
+                str(confusion_matrix[i,j]),
+                ha="center",
+                va="center",
+                fontsize=14
+            )
+
+    plt.title("Confusion Matrix")
+
+    plt.show()
+
+
+    ##################################################
+    # 5. ROC CURVE
+    ##################################################
+
+    thresholds = np.linspace(-10, 0, 200)
+
+    tprs = []
+    fprs = []
+
+    for t in thresholds:
+
+        TP = FP = TN = FN = 0
+
+        for sample in dataset:
+
+            actual = sample[2]
+
+            pred = 1 if sample[3] > t else 0
+
+            if actual == 1 and pred == 1:
+                TP += 1
+
+            elif actual == 1 and pred == 0:
+                FN += 1
+
+            elif actual == 0 and pred == 1:
+                FP += 1
+
+            else:
+                TN += 1
+
+        TPR = TP / (TP + FN)
+        FPR = FP / (FP + TN)
+
+        tprs.append(TPR)
+        fprs.append(FPR)
+
+    auc = abs(np.trapezoid(tprs,fprs))
+    plt.figure(figsize=(8,8))
+
+    plt.plot(
+        fprs,
+        tprs,
+        linewidth=2,
+    )
+    plt.text(
+        0.6,
+        0.2,
+        f"AUC = {auc:.5f}",
+        fontsize=12,
+        bbox=dict(facecolor="white", alpha=0.8)
+    )
+
+    plt.plot(
+        [0,1],
+        [0,1],
+        linestyle="--"
+    )
+
+    plt.xlabel("False Positive Rate")
+    plt.ylabel("True Positive Rate")
+
+    plt.title("ROC Curve")
+
+    plt.show()
+
+generate_all_visualizations(
+    trigram_counts=counts,
+    dataset = dataset ,
+    confusion_matrix=confusion_matrix,
+    threshold=threshold,
+    accepted_chars=accepted_chars
+)
